@@ -1,0 +1,284 @@
+#!/usr/bin/env bash
+#
+# efistub - https://gitlab.com/tim241/efistub
+#
+# Copyright (C) 2018 Tim Wanders <tim241@mailbox.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+set -e
+
+# enable debug
+[ "x$EFISTUB_DEBUG" = "x1" ] && \
+    set -x
+
+# default settings
+EFISTUB_NAME="EFISTUB"
+EFISTUB_CMDLINE_LINUX_DEFAULT=""
+EFISTUB_EFI_PARTITION="find_auto"
+EFISTUB_EFI_DIRECTORY="/boot/efi"
+EFISTUB_ROOT_PARTITION="find_auto"
+
+EFISTUB_INITRAMFS="find_auto"
+EFISTUB_LINUX="find_auto"
+
+EFISTUB_ID_TYPE="partuuid"
+
+# script vars
+EFISTUB_CONFIG="/etc/default/efistub"
+dependencies=('efibootmgr' 'df' 'tail' 'cut' 'find' 'head')
+
+# error if arguments are empty
+function error_empty()
+{
+    if [ ! "$@" ]
+    then
+        echo "$error_msg"
+        exit 1
+    fi
+}
+
+# error if arguments are empty
+# or don't exist
+function error_empty_invalid()
+{
+    error_empty "$@"
+
+    if [ ! -e "$@" ]
+    then
+        echo "$error_msg"
+        exit 1
+    fi
+}
+
+# check if dependency is installed
+function check_dep()
+{
+    program="$@"
+    if ! command -v "$program" &> /dev/null
+    then
+        echo "$program not installed!"
+        exit 1
+    fi
+}
+
+# check if all dependencies are installed
+function check_deps()
+{
+    for program in "${dependencies[@]}"
+    do
+        check_dep "$program"
+    done
+}
+
+# get device from folder
+function get_device()
+{
+    directory="$@"
+    if [ -d "$directory" ]
+    then
+        df -P "$directory" \
+            | tail -1 \
+            | cut -d' ' -f 1
+    fi
+}
+
+# get disk id
+function get_disk_id()
+{
+    local id_dir disk
+    disk="$@"
+    id_dir="/dev/disk/by-$EFISTUB_ID_TYPE"
+    if [ ! -d "$id_dir" ]
+    then
+        echo "EFISTUB_ID_TYPE is invalid!"
+        exit 1
+    fi
+
+    current_dir="$(pwd)"
+
+    cd "$id_dir"
+
+    for disk_id in *
+    do
+        # get link
+        disk_file="$(readlink "$disk_id")"
+        # get real path from relative path
+        disk_file="$(realpath "$disk_file")"
+
+        if [ "$disk_file" = "$disk" ]
+        then
+            echo "$disk_id"
+            return
+        fi
+    done
+
+    # if we're here, we couldn't find it..
+    echo "couldn't find $EFISTUB_ID_TYPE for $disk"
+    exit 1
+}
+
+AUTO_ROOT_DIRECTORY="/"
+
+# install efistub
+function efistub_install()
+{
+    local efi_dev root_dev root_disk_id initramfs linux
+
+    if [ "$EFISTUB_EFI_PARTITION" != "find_auto" ]
+    then
+        efi_dev="$EFISTUB_EFI_PARTITION"
+
+        error_msg="EFISTUB_EFI_PARTITION is invalid!"
+        error_empty_invalid "$efi_dev"
+    else
+        efi_dev="$(get_device "$EFISTUB_EFI_DIRECTORY")"
+
+        error_msg="$EFISTUB_EFI_DIRECTORY doesn't exist, specify EFISTUB_EFI_PARTITION in the config file!"
+        error_empty_invalid "$efi_dev"
+    fi
+
+    if [ "$EFISTUB_ROOT_PARTITION" != "find_auto" ]
+    then
+        root_dev="$EFISTUB_ROOT_PARTITION"
+        
+        error_msg="EFISTUB_ROOT_PARTITION is invalid!"
+        error_empty_invalid "$root_dev"
+    else
+        root_dev="$(get_device "$AUTO_ROOT_DIRECTORY")"
+        
+        error_msg="$AUTO_ROOT_DIRECTORY doesn't exist, specify EFISTUB_ROOT_PARTITION in the config file!"
+        error_empty_invalid "$root_dev"
+    fi
+    
+    root_disk_id="$(get_disk_id "$root_dev")"
+
+    if [ "$EFISTUB_INITRAMFS" != "find_auto" ]
+    then
+        initramfs="$EFISTUB_INITRAMFS"
+    
+        error_msg="EFISTUB_INITRAMFS is invalid!"
+        error_empty "$EFISTUB_INITRAMFS"
+    else
+        initramfs="$(find "$EFISTUB_EFI_DIRECTORY" -type f -name '*initramfs*.img' | head -1)"        
+        initramfs="${initramfs//$EFISTUB_EFI_DIRECTORY/}"
+
+        error_msg="can't find initramfs!, specify EFISTUB_INITRAMFS in the config file!"
+        error_empty "$initramfs"
+    fi
+    
+    echo "Found initramfs: $EFISTUB_EFI_DIRECTORY$initramfs"
+
+    if [ "$EFISTUB_LINUX" != "find_auto" ]
+    then
+        linux="$EFISTUB_LINUX"
+
+        error_msg="EFISTUB_LINUX is invalid!"
+        error_empty_invalid "$EFISTUB_EFI_DIRECTORY$EFISTUB_LINUX"
+    else
+        linux="$(find "$EFISTUB_EFI_DIRECTORY" -type f -name '*vmlinuz*' | head -1)"
+        linux="${linux//$EFISTUB_EFI_DIRECTORY/}"
+
+        error_msg="can't find vmlinuz!, specify EFISTUB_LINUX in the config file!"
+        error_empty_invalid "$EFISTUB_EFI_DIRECTORY$linux"
+    fi
+
+    echo "Found vmlinuz: $EFISTUB_EFI_DIRECTORY$linux"
+
+    EFISTUB_FULL_CMDLINE="root=${EFISTUB_ID_TYPE^^}=$root_disk_id rw initrd=$initramfs $EFISTUB_CMDLINE_LINUX_DEFAULT"
+    echo "Adding item.."
+    efibootmgr --disk /dev/sda --part 1 --create --label "$EFISTUB_NAME" \
+        --loader "$linux" \
+        --unicode "$EFISTUB_FULL_CMDLINE" \
+        --quiet
+
+    echo "$EFISTUB_NAME" > "$EFISTUB_EFI_DIRECTORY/efistub"
+
+    echo "Completed!"
+}
+
+# uninstall efistub
+function efistub_uninstall()
+{
+    file="$EFISTUB_EFI_DIRECTORY/efistub"
+    if [ ! -f "$file" ]
+    then
+        echo "efistub isn't installed!"
+        exit 1  
+    fi
+
+    EFISTUB_NAME="$(cat "$file")"
+    for var in $(efibootmgr | grep "$EFISTUB_NAME" | awk '{ print $1 }')
+    do
+        var="${var//Boot}"
+        var="${var//\*}"
+        echo "Deleting $var"
+        efibootmgr -b "$var" -B --quiet
+    done
+
+    echo "efistub uninstalled!"
+}
+
+# update efistub
+function efistub_update()
+{
+    efistub_uninstall
+    efistub_install
+}
+
+# shows usage
+function usage()
+{
+    printf "%s\n%s\n%s\n" \
+        "$0 install" \
+        "$0 uninstall" \
+        "$0 update"
+}
+
+# parse arguments
+function parse_args()
+{
+    for argument in $@
+    do
+        case $argument in
+            install)   efistub_install;;
+            uninstall) efistub_uninstall;;
+            update)    efistub_update;;
+            help)      usage; exit;;
+            *)         usage; exit 1;;
+        esac
+    done
+}
+
+# source config file
+function source_config()
+{
+    if [ -f "$EFISTUB_CONFIG" ]
+    then
+        source "$EFISTUB_CONFIG"
+    else
+        echo "$EFISTUB_CONFIG not found, trying default settings"
+    fi
+}
+
+# check dependencies
+check_deps
+
+# source config file
+source_config
+
+# parse arguments
+parse_args "$@"
+
+
