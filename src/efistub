@@ -37,15 +37,21 @@ EFISTUB_ID_TYPE="partuuid"
 
 # script vars
 EFISTUB_CONFIG="/etc/default/efistub"
-dependencies=('efibootmgr' 'df' 'tail' 'cut' 'find' 'head')
+dependencies=('efibootmgr' 'df' 'tail' 'cut' 'find' 'head' 'grep')
+
+# show error message in stderr and exit 1
+function error()
+{
+    >&2 echo "$@"
+    exit 1
+}
 
 # error if arguments are empty
 function error_empty()
 {
     if [ ! "$@" ]
     then
-        echo "$error_msg"
-        exit 1
+        error "$error_msg"
     fi
 }
 
@@ -57,8 +63,7 @@ function error_empty_invalid()
 
     if [ ! -e "$@" ]
     then
-        echo "$error_msg"
-        exit 1
+        error "$error_msg"
     fi
 }
 
@@ -68,8 +73,7 @@ function check_dep()
     program="$@"
     if ! command -v "$program" &> /dev/null
     then
-        echo "$program not installed!"
-        exit 1
+        error "$program not installed!"
     fi
 }
 
@@ -98,7 +102,7 @@ function get_device()
 function get_disk_id()
 {
     local id_dir disk
-    disk="$@"
+    disk="$(realpath "$@")"
     id_dir="/dev/disk/by-$EFISTUB_ID_TYPE"
     if [ ! -d "$id_dir" ]
     then
@@ -125,8 +129,7 @@ function get_disk_id()
     done
 
     # if we're here, we couldn't find it..
-    echo "couldn't find $EFISTUB_ID_TYPE for $disk"
-    exit 1
+    error "couldn't find $EFISTUB_ID_TYPE for $disk, specify EFISTUB_ROOT_PARTITION in the config file!"
 }
 
 AUTO_ROOT_DIRECTORY="/"
@@ -162,6 +165,13 @@ function efistub_install()
         error_empty_invalid "$root_dev"
     fi
     
+    root_dev_part="$(echo "$root_dev" | grep -Eo '[0-9]+$')"
+    root_dev_disk="${root_dev//$root_dev_part/}"
+
+    error_msg="unknown error!"
+    error_empty "$root_dev_part"
+    error_empty_invalid "$root_dev_disk"
+ 
     root_disk_id="$(get_disk_id "$root_dev")"
 
     if [ "$EFISTUB_INITRAMFS" != "find_auto" ]
@@ -195,10 +205,14 @@ function efistub_install()
     fi
 
     echo "Found vmlinuz: $EFISTUB_EFI_DIRECTORY$linux"
-
+    
     EFISTUB_FULL_CMDLINE="root=${EFISTUB_ID_TYPE^^}=$root_disk_id rw initrd=$initramfs $EFISTUB_CMDLINE_LINUX_DEFAULT"
     echo "Adding item.."
-    efibootmgr --disk /dev/sda --part 1 --create --label "$EFISTUB_NAME" \
+    efibootmgr \
+        --disk "$root_dev_disk" \
+        --part "$root_dev_part" \
+        --create \
+        --label "$EFISTUB_NAME" \
         --loader "$linux" \
         --unicode "$EFISTUB_FULL_CMDLINE" \
         --quiet
@@ -214,8 +228,7 @@ function efistub_uninstall()
     file="$EFISTUB_EFI_DIRECTORY/efistub"
     if [ ! -f "$file" ]
     then
-        echo "efistub isn't installed!"
-        exit 1  
+        error "efistub isn't installed!"
     fi
 
     EFISTUB_NAME="$(cat "$file")"
@@ -249,6 +262,11 @@ function usage()
 # parse arguments
 function parse_args()
 {
+    if [ ! "$@" ]
+    then
+        usage
+        exit 1
+    fi
     for argument in $@
     do
         case $argument in
@@ -271,6 +289,12 @@ function source_config()
         echo "$EFISTUB_CONFIG not found, trying default settings"
     fi
 }
+
+# check for root
+if [ "$UID" != "0" ]
+then
+    error "this program requires root"
+fi
 
 # check dependencies
 check_deps

@@ -1,0 +1,45 @@
+#
+# efistub config file
+#
+
+# efistub label
+#
+EFISTUB_NAME="EFISTUB"
+
+# Linux cmdline
+#
+EFISTUB_CMDLINE_LINUX_DEFAULT=""
+
+# EFI partition location
+# i.e /dev/sda1
+# find_auto = autodetect
+#
+EFISTUB_EFI_PARTITION="find_auto"
+
+# EFI mounted directory
+# i.e /boot/efi
+#
+EFISTUB_EFI_DIRECTORY="/boot/efi"
+
+# ROOT partition location
+# i.e /dev/sda2
+# find_auto = autodetect
+#
+EFISTUB_ROOT_PARTITION="find_auto"
+
+# INITRAMFS filename
+# i.e initramfs.img
+# find_auto = autodetect
+#
+EFISTUB_INITRAMFS="find_auto"
+
+# LINUX filename
+# i.e vmlinuz
+# find_auto = autodetect
+#
+EFISTUB_LINUX="find_auto"
+
+# Linux cmdline root partition id type
+# i.e partuuid
+#
+EFISTUB_ID_TYPE="partuuid"
