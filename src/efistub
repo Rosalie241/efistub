@@ -165,12 +165,12 @@ function efistub_install()
         error_empty_invalid "$root_dev"
     fi
     
-    root_dev_part="$(echo "$root_dev" | grep -Eo '[0-9]+$')"
-    root_dev_disk="${root_dev//$root_dev_part/}"
+    efi_dev_part="$(echo "$efi_dev" | grep -Eo '[0-9]+$')"
+    efi_dev_disk="${efi_dev//$efi_dev_part/}"
 
     error_msg="unknown error!"
-    error_empty "$root_dev_part"
-    error_empty_invalid "$root_dev_disk"
+    error_empty "$efi_dev_part"
+    error_empty_invalid "$efi_dev_disk"
  
     root_disk_id="$(get_disk_id "$root_dev")"
 
@@ -209,8 +209,8 @@ function efistub_install()
     EFISTUB_FULL_CMDLINE="root=${EFISTUB_ID_TYPE^^}=$root_disk_id rw initrd=$initramfs $EFISTUB_CMDLINE_LINUX_DEFAULT"
     echo "Adding item.."
     efibootmgr \
-        --disk "$root_dev_disk" \
-        --part "$root_dev_part" \
+        --disk "$efi_dev_disk" \
+        --part "$efi_dev_part" \
         --create \
         --label "$EFISTUB_NAME" \
         --loader "$linux" \
