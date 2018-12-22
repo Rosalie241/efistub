@@ -7,4 +7,5 @@ all:
 
 install:
 	install -D src/efistub         "$(destdir)/$(bindir)/efistub"
-	install -D src/default/efistub "$(destdir)/$(etcdir)/default/efistub"
+	# use cp here, don't overwrite the config file
+	cp -n src/default/efistub "$(destdir)/$(etcdir)/default/efistub"
