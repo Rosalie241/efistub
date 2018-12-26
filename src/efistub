@@ -36,8 +36,8 @@ EFISTUB_LINUX="find_auto"
 EFISTUB_ID_TYPE="partuuid"
 
 # script vars
-EFISTUB_CONFIG="/etc/default/efistub"
-dependencies=('efibootmgr' 'df' 'tail' 'cut' 'find' 'head' 'grep')
+readonly EFISTUB_CONFIG="/etc/default/efistub"
+readonly dependencies=('efibootmgr' 'df' 'tail' 'cut' 'find' 'head' 'grep')
 
 # show error message in stderr and exit 1
 function error()
@@ -102,8 +102,11 @@ function get_device()
 function get_disk_id()
 {
     local id_dir disk
+
     disk="$(realpath "$@")"
-    id_dir="/dev/disk/by-$EFISTUB_ID_TYPE"
+    # make sure EFISTUB_ID_TYPE is lowercase
+    id_dir="/dev/disk/by-${EFISTUB_ID_TYPE,,}"
+
     if [ ! -d "$id_dir" ]
     then
         echo "EFISTUB_ID_TYPE is invalid!"
@@ -138,6 +141,7 @@ AUTO_ROOT_DIRECTORY="/"
 function efistub_install()
 {
     local efi_dev root_dev root_disk_id initramfs linux
+    local EFISTUB_FULL_CMDLINE EFISTUB_BASE_CMDLINE EFISTUB_ROOT_CMDLINE
 
     if [ "$EFISTUB_EFI_PARTITION" != "find_auto" ]
     then
@@ -206,7 +210,19 @@ function efistub_install()
 
     echo "Found vmlinuz: $EFISTUB_EFI_DIRECTORY$linux"
     
-    EFISTUB_FULL_CMDLINE="root=${EFISTUB_ID_TYPE^^}=$root_disk_id rw initrd=$initramfs $EFISTUB_CMDLINE_LINUX_DEFAULT"
+    EFISTUB_BASE_CMDLINE="initrd=$initramfs $EFISTUB_CMDLINE_LINUX_DEFAULT"
+    # make sure EFISTUB_ID_TYPE is uppercase
+    EFISTUB_ROOT_CMDLINE="root=${EFISTUB_ID_TYPE^^}=$root_disk_id rw"
+
+    # if 'root=' is in config defined cmdline, don't add EFISTUB_ROOT_CMDLINE
+    # else, add EFISTUB_ROOT_CMDLINE
+    if [ "x$(echo "$EFISTUB_CMDLINE_LINUX_DEFAULT" | grep "root=")" != "x" ]
+    then
+        EFISTUB_FULL_CMDLINE="$EFISTUB_BASE_CMDLINE"
+    else
+        EFISTUB_FULL_CMDLINE="$EFISTUB_ROOT_CMDLINE $EFISTUB_BASE_CMDLINE"
+    fi
+
     echo "Adding item.."
     efibootmgr \
         --disk "$efi_dev_disk" \
@@ -225,14 +241,16 @@ function efistub_install()
 # uninstall efistub
 function efistub_uninstall()
 {
+    local file name
+
     file="$EFISTUB_EFI_DIRECTORY/efistub"
     if [ ! -f "$file" ]
     then
         error "efistub isn't installed!"
     fi
 
-    EFISTUB_NAME="$(cat "$file")"
-    for var in $(efibootmgr | grep "$EFISTUB_NAME" | awk '{ print $1 }')
+    name="$(cat "$file")"
+    for var in $(efibootmgr | grep "$name" | awk '{ print $1 }')
     do
         var="${var//Boot}"
         var="${var//\*}"
