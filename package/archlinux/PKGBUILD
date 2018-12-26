@@ -1,0 +1,29 @@
+# Maintainer: Tim Wanders <tim241@mailbox.org>
+_pkgname=efistub
+pkgname=efistub-git
+pkgver=git
+pkgrel=1
+pkgdesc="efistub: a simple tool for installing efistub"
+arch=('any')
+url="https://gitlab.com/tim241/${_pkgname}"
+license=('GPLv3')
+
+backup=("etc/default/efistub")
+
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+depends=("efibootmgr" "bash" "gawk" "coreutils" "grep")
+
+source=("git+https://gitlab.com/tim241/${_pkgname}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgname"
+    git describe --tags --always | sed -e 's|-|.|g'
+}
+
+package() {
+    cd "$_pkgname"
+    mkdir -p "$pkgdir/etc/default"
+    make install bindir="/usr/bin" etcdir="/etc/" destdir="$pkgdir"
+}
