@@ -14,8 +14,10 @@ provides=("$_pkgname")
 conflicts=("$_pkgname")
 depends=("efibootmgr" "bash" "gawk" "coreutils" "grep")
 
-source=("git+https://gitlab.com/tim241/${_pkgname}.git")
-sha256sums=('SKIP')
+source=("git+https://gitlab.com/tim241/${_pkgname}.git"
+        "99-efistub.hook")
+sha256sums=('SKIP'
+            'SKIP')
 
 pkgver() {
     cd "$_pkgname"
@@ -26,4 +28,5 @@ package() {
     cd "$_pkgname"
     mkdir -p "$pkgdir/etc/default"
     make install bindir="/usr/bin" etcdir="/etc/" destdir="$pkgdir"
+    install -D ../99-efistub.hook "$pkgdir/etc/pacman.d/hooks/99-efistub.hook"
 }
