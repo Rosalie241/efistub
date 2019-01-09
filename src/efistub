@@ -258,6 +258,9 @@ function efistub_uninstall()
         efibootmgr -b "$var" -B --quiet
     done
 
+    # finally, remove efistub file
+    rm -rf "$file"
+
     echo "efistub uninstalled!"
 }
 
