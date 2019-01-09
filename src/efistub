@@ -38,7 +38,6 @@ EFISTUB_ID_TYPE="partuuid"
 # script vars
 readonly EFISTUB_CONFIG="/etc/default/efistub"
 readonly dependencies=('efibootmgr' 'df' 'tail' 'cut' 'find' 'head' 'grep')
-hook=false
 
 # show error message in stderr and exit 1
 function error()
@@ -247,13 +246,7 @@ function efistub_uninstall()
     file="$EFISTUB_EFI_DIRECTORY/efistub"
     if [ ! -f "$file" ]
     then
-        if [ "$hook" = "true" ]
-        then
-            echo "efistub isn't installed, skipping"
-            exit
-        else
-            error "efistub isn't installed!"
-        fi
+        error "efistub isn't installed!"
     fi
 
     name="$(cat "$file")"
@@ -264,9 +257,6 @@ function efistub_uninstall()
         echo "Deleting $var"
         efibootmgr -b "$var" -B --quiet
     done
-
-    # finally, remove efistub file
-    rm -rf "$file"
 
     echo "efistub uninstalled!"
 }
@@ -301,7 +291,6 @@ function parse_args()
             install)   efistub_install;;
             uninstall) efistub_uninstall;;
             update)    efistub_update;;
-            hook-update) hook=true; efistub_update;;
             help)      usage; exit;;
             *)         usage; exit 1;;
         esac
