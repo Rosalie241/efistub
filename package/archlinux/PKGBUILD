@@ -4,7 +4,7 @@ pkgver=git
 pkgrel=1
 pkgdesc="efistub: a simple tool for installing efistub"
 arch=('any')
-url="https://gitlab.com/Rosalie241/${_pkgname}"
+url="https://github.com/Rosalie241/${_pkgname}"
 license=('GPLv3')
 
 backup=("etc/default/efistub")
